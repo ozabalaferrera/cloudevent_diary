@@ -1,0 +1,32 @@
+[package]
+resolver = "2"
+name = "cloudevent_diary"
+version = "0.1.0"
+edition = "2021"
+description = ""
+authors = ["ozabalaferrera"]
+repository = "https://github.com/ozabalaferrera/cloudevent_diary"
+rust-version = "1.70.0"
+exclude = [".github"]
+keywords = ["knative", "cloudevent"]
+license = "MIT OR Apache-2.0"
+
+#-------------------------------------------------
+# These should not change in order to
+# maintain compatibility with the Dockerfile
+[[bin]]
+name = "app"
+path = "src/app.rs"
+#-------------------------------------------------
+
+
+[dependencies]
+cloudevents-sdk = { version = "0.7", features = ["warp"] }
+dotenv = "0.15.0"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-native-tls", "postgres", "chrono", "json" ] }
+tokio = { version = "1.32", features = ["rt-multi-thread", "macros"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+warp = "0.3"
+
+[dev-dependencies]

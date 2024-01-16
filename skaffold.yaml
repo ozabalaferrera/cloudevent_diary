@@ -1,0 +1,39 @@
+apiVersion: skaffold/v4beta3
+kind: Config
+metadata:
+  name: &serviceName cloudevent-diary
+test:
+- image: *serviceName
+  custom:
+  - timeoutSeconds: 120
+    command: "cd app && cargo test"
+build:
+  tagPolicy:
+    gitCommit:
+      ignoreChanges: false
+  artifacts:
+  - image: *serviceName
+    docker:
+      dockerfile: Dockerfile
+      buildArgs:
+        BASE_IMAGE_BUILD: "rust:buster"
+        BASE_IMAGE_RUN: "gcr.io/distroless/cc"
+        APP_NAME: *serviceName
+deploy:
+  helm:
+    releases:
+    - name: *serviceName
+      version: 0.1.0
+      namespace: &serviceNamespace default
+      chartPath: chart
+      valuesFiles:
+      - chart/values.yaml
+      setValueTemplates:
+        image.registry: "{{.IMAGE_DOMAIN_cloudevent_diary}}"
+        image.repository: "{{.IMAGE_REPO_NO_DOMAIN_cloudevent_diary}}"
+        image.tag: "{{.IMAGE_TAG_cloudevent_diary}}@{{.IMAGE_DIGEST_cloudevent_diary}}"
+      setValues:
+        image.pullPolicy: "IfNotPresent"
+        service.namespace: *serviceNamespace
+        service.replicas: 1
+        service.env.RUST_LOG: info

@@ -1,0 +1,36 @@
+image:
+  registry: 127.0.0.1:60243
+  repository: skaffold
+  tag: v0.1.0
+  pullPolicy: "IfNotPresent"
+
+service:
+  name: null
+  namespace: null
+  annotations:
+    autoscaling.knative.dev/metric: "concurrency"
+    autoscaling.knative.dev/target: "1000"
+    autoscaling.knative.dev/initial-scale: "1"
+    autoscaling.knative.dev/min-scale: "1"
+    autoscaling.knative.dev/max-scale: "5"
+    autoscaling.knative.dev/target-utilization-percentage: "70"
+    autoscaling.knative.dev/scale-down-delay: "10m"
+  resources:
+    requests:
+      cpu: 300m
+      memory: 100M
+    # limits:
+  #   cpu: 1000m
+  #   memory: 350M
+  env:
+    RUST_LOG: "info"
+    WEB_PORT: "8080"
+
+
+db:
+  host: localhost
+  name: postgres
+  user: postgres
+  auth_secret: postgres_auth
+  schema: public
+  table: cloudevent_diary

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ default .Values.service.name .Release.Name }}-env-config
+  namespace: {{ default .Values.service.namespace .Release.Namespace }}
+data:
+  {{- range $label, $value := .Values.service.env }}
+  {{ $label }}: {{ $value | quote}}
+  {{- end }}

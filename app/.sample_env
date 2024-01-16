@@ -1,0 +1,18 @@
+
+BASE_IMAGE_BUILD= "rust:buster"
+BASE_IMAGE_RUN= "gcr.io/distroless/cc"
+
+RUST_LOG="INFO"
+
+DB_HOST="localhost"
+DB_NAME="postgres"
+DB_USER="postgres"
+DB_PASSWORD="password"
+# Can be used by sqlx macros for compile-time checks.
+DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}/${DB_NAME}"
+
+DB_SCHEMA="public"
+DB_TABLE="cloudevents_diary"
+
+WEB_CONCURRENCY="10"
+WEB_PORT="8080"

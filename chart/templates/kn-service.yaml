@@ -1,0 +1,68 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: {{ default .Values.service.name .Release.Name }}
+  namespace: {{ default .Values.service.namespace .Release.Namespace }}
+spec:
+  template:
+    metadata:
+      annotations:
+        {{ toYaml .Values.service.annotations | nindent 8 }}
+    spec:
+      containerConcurrency: {{ index .Values.service.annotations "autoscaling.knative.dev/target" | int64 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{.Values.image.registry}}/{{.Values.image.repository}}:{{.Values.image.tag}}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          {{ toYaml .Values.service.resources | nindent 10 }}
+        ports:
+          - containerPort: {{ .Values.service.env.WEB_PORT }}
+        env:
+        - name: HELM_RELEASE_NAME
+          value: {{ .Release.Name | quote }}
+        - name: HELM_RELEASE_REVISION
+          value: {{ .Release.Revision | quote }}
+        - name: HELM_CHART_NAME
+          value: {{ .Chart.Name | quote }}
+        - name: HELM_CHART_VERSION
+          value: {{ .Chart.Version | quote }}
+        - name: HELM_RELEASE_NAMESPACE
+          value: {{ .Release.Namespace | quote }}
+        - name: WEB_PORT
+          value: {{ .Values.service.env.WEB_PORT | quote }}
+        - name: WEB_CONCURRENCY
+          value: {{ index .Values.service.annotations "autoscaling.knative.dev/target" | quote }}
+        - name: DB_HOST
+          value: {{ .Values.db.host | quote }}
+        - name: DB_NAME
+          value: {{ .Values.db.name | quote }}
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.db.auth_secret }}
+              key: user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.db.auth_secret }}
+              key: password
+        envFrom:
+        - configMapRef:
+            name: {{ default .Values.service.name .Release.Name }}-env-config
+            namespace: {{ default .Values.service.namespace .Release.Namespace }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+        readinessProbe:
+          failureThreshold: 1
+          periodSeconds: 5
+          timeoutSeconds: 1
+          httpGet:
+            path: /health/ready
+        livenessProbe:
+          failureThreshold: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          httpGet:
+            path: /health/live
