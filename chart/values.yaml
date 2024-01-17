@@ -30,7 +30,15 @@ service:
 db:
   host: localhost
   name: postgres
-  user: postgres
-  auth_secret: postgres_auth
+  user:
+    valueFrom:
+      secretKeyRef:
+        name: postgres_auth
+        key: user
+  password:
+    valueFrom:
+      secretKeyRef:
+        name: postgres_auth
+        key: password
   schema: public
   table: cloudevent_diary

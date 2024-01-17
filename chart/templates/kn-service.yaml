@@ -38,15 +38,9 @@ spec:
         - name: DB_NAME
           value: {{ .Values.db.name | quote }}
         - name: DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.db.auth_secret }}
-              key: user
+          {{ toYaml .Values.db.user | nindent 10 }}
         - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.db.auth_secret }}
-              key: password
+          {{ toYaml .Values.db.password | nindent 10 }}
         envFrom:
         - configMapRef:
             name: {{ default .Values.service.name .Release.Name }}-env-config
