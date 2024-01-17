@@ -1,6 +1,57 @@
 use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
+use tokio::sync::OnceCell;
+use warp::reply::Response;
 use warp::{Future, Reply};
+
+static DB_POOL: OnceCell<sqlx::Pool<sqlx::Postgres>> = OnceCell::const_new();
+
+async fn get_db_pool() -> &'static sqlx::Pool<sqlx::Postgres> {
+    DB_POOL
+        .get_or_init(|| async { crate::db::get_pool_from_env().await })
+        .await
+}
+
+#[tokio::test]
+async fn time_entries() {
+    dotenv::dotenv().expect("Could not load .env for testing.");
+    let db_pool = get_db_pool().await;
+    let db_schema = Arc::new(env::var("DB_SCHEMA").unwrap_or("public".to_owned()));
+    let db_table = Arc::new(env::var("DB_TABLE").unwrap_or("cloudevents_diary".to_owned()));
+
+    crate::db::guarantee_db_components(db_pool.clone(), db_schema.as_str(), db_table.as_str())
+        .await;
+    let filters = super::filters(db_pool.clone(), db_schema, db_table);
+
+    let (_, duration) = time_async(async {
+        for _i in 0..10_000 {
+            post_event(filters.clone()).await;
+        }
+    })
+    .await;
+
+    println!("Duration: {duration:?}");
+}
+
+#[tokio::test]
+async fn db_ready() {
+    dotenv::dotenv().expect("Could not load .env for testing.");
+
+    let db_pool = get_db_pool().await;
+    let db_schema = Arc::new(env::var("DB_SCHEMA").unwrap_or("public".to_owned()));
+    let db_table = Arc::new(env::var("DB_TABLE").unwrap_or("cloudevents_diary".to_owned()));
+
+    crate::db::guarantee_db_components(db_pool.clone(), db_schema.as_str(), db_table.as_str())
+        .await;
+    let filters = super::filters(db_pool.clone(), db_schema, db_table);
+
+    let req = warp::test::request().method("GET").path("/health/live");
+    let res = req.reply(&filters).await;
+    let status = res.status();
+    assert_eq!(status, warp::http::StatusCode::ACCEPTED);
+    let time = String::from_utf8(res.body().to_vec()).expect("Bad ready response.");
+    println!("Time: {time}");
+}
 
 async fn time_async<F, O>(f: F) -> (O, Duration)
 where
@@ -28,25 +79,4 @@ async fn post_event(
         .body(r#"{"body":"hello world", "volume": 10}"#);
 
     req.reply(&filters).await
-}
-
-#[tokio::test]
-async fn time_entries() {
-    dotenv::dotenv().expect("Could not load .env for testing.");
-
-    let db_schema = Arc::new(env::var("DB_SCHEMA").unwrap_or("public".to_owned()));
-    let db_table = Arc::new(env::var("DB_TABLE").unwrap_or("cloudevents_diary".to_owned()));
-    let db_pool = crate::db::get_pool_from_env().await;
-    crate::db::guarantee_db_components(db_pool.clone(), db_schema.as_str(), db_table.as_str())
-        .await;
-    let filters = super::filters(db_pool, db_schema, db_table);
-
-    let (_, duration) = time_async(async {
-        for _i in 0..10_000 {
-            post_event(filters.clone()).await;
-        }
-    })
-    .await;
-
-    println!("Duration: {duration:?}");
 }
