@@ -1,8 +1,5 @@
 use cloudevents::{event::ExtensionValue, AttributesReader, Data, Event};
-use sqlx::{
-    types::chrono::{DateTime, Utc},
-    Pool, Postgres,
-};
+use sqlx::{Pool, Postgres, Row};
 use std::{convert::Infallible, sync::Arc};
 use warp::{http::StatusCode, reply::Reply};
 
@@ -15,19 +12,12 @@ pub async fn ready() -> Result<impl Reply, Infallible> {
 }
 
 pub async fn live(db_pool: Pool<Postgres>) -> Result<impl Reply, Infallible> {
-    struct TimeStringResponse {
-        pub time: Option<String>,
-    }
-
-    let res: Result<TimeStringResponse, sqlx::Error> = sqlx::query_as!(
-        TimeStringResponse,
-        r#"SELECT TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS') as time;"#
-    )
-    .fetch_one(&db_pool)
-    .await;
+    let res = sqlx::query(r#"SELECT TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS');"#)
+        .fetch_one(&db_pool)
+        .await;
 
     match res {
-        Ok(row) => match row.time {
+        Ok(row) => match row.get(0) {
             Some(time) => {
                 tracing::debug!(time);
                 Ok(warp::reply::with_status(time, StatusCode::ACCEPTED))
@@ -57,18 +47,12 @@ pub async fn ce_entry(
     db_schema: Arc<String>,
     db_table: Arc<String>,
 ) -> Result<impl Reply, Infallible> {
-    struct CloudEventColumns<'a> {
-        pub id: &'a str,
-        pub source: &'a str,
-        pub ty: &'a str,
-        pub time: Option<&'a DateTime<Utc>>,
-        pub knativeerrorcode: Option<i64>,
-        pub knativeerrordata: Option<&'a str>,
-        pub knativeerrordest: Option<&'a str>,
-        pub data: Option<&'a str>,
-    }
-
     tracing::debug!("{}", &event);
+
+    let id = event.id();
+    let source = event.source();
+    let ty = event.ty();
+    let time = event.time();
 
     let knativeerrorcode = match event.extension("knativeerrorcode") {
         Some(ExtensionValue::Integer(i)) => Some(*i),
@@ -132,34 +116,24 @@ pub async fn ce_entry(
         None => None,
     };
 
-    let row = CloudEventColumns {
-        id: event.id(),
-        source: event.source().as_str(),
-        ty: event.ty(),
-        time: event.time(),
-        knativeerrorcode,
-        knativeerrordata,
-        knativeerrordest,
-        data,
-    };
-
-    let res = sqlx::query_builder::QueryBuilder::new(format!(
-        r#"
-            INSERT INTO {db_schema}.{db_table}
-            (id, source, type, time, knativeerrorcode, knativeerrordata, knativeerrordest, data)
+    let res = sqlx::query(
+        format!(
+            r#"
+        INSERT INTO {db_schema}.{db_table}
+        (id, source, type, time, knativeerrorcode, knativeerrordata, knativeerrordest, data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         "#
-    ))
-    .push_values([row], |mut b, row| {
-        b.push_bind(row.id)
-            .push_bind(row.source)
-            .push_bind(row.ty)
-            .push_bind(row.time)
-            .push_bind(row.knativeerrorcode)
-            .push_bind(row.knativeerrordata)
-            .push_bind(row.knativeerrordest)
-            .push_bind(row.data);
-    })
-    .build()
+        )
+        .as_str(),
+    )
+    .bind(id)
+    .bind(source)
+    .bind(ty)
+    .bind(time)
+    .bind(knativeerrorcode)
+    .bind(knativeerrordata)
+    .bind(knativeerrordest)
+    .bind(data)
     .execute(&db_pool)
     .await;
 
