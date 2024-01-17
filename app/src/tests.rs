@@ -71,11 +71,13 @@ async fn post_event(
         .path("/")
         .header("ce-type", "com.acme.events.something")
         .header("ce-source", "com.acme.apps.ingress")
-        .header("ce-id", "370058fc-0d71-11ee-be56-0242ac120002")
+        .header("ce-id", uuid::Uuid::new_v4().to_string())
         .header("ce-specversion", "1.0")
-        .header("ce-time", "2023-07-02T00:00:00Z")
+        .header("ce-time", chrono::Utc::now().to_rfc3339())
         .header("ce-datacontenttype", "application/json")
-        .header("ce-something", "no nulls")
+        .header("ce-knativeerrorcode", 500)
+        .header("ce-knativeerrordata", "")
+        .header("ce-knativeerrordest", "http://acme.com")
         .body(r#"{"body":"hello world", "volume": 10}"#);
 
     req.reply(&filters).await

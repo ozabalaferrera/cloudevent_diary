@@ -185,12 +185,14 @@ dependencies = [
 name = "cloudevent_diary"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "cloudevents-sdk",
  "dotenv",
  "sqlx",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "warp",
 ]
 
