@@ -33,12 +33,12 @@ db:
   user:
     valueFrom:
       secretKeyRef:
-        name: postgres_auth
+        name: postgres-auth
         key: user
   password:
     valueFrom:
       secretKeyRef:
-        name: postgres_auth
+        name: postgres-auth
         key: password
   schema: public
   table: cloudevent_diary

@@ -1,31 +1,54 @@
+use crate::{db::get_pool_from_config, AppConfig};
+use envconfig::Envconfig;
 use std::time::{Duration, Instant};
-use std::{env, sync::Arc};
 use tokio::sync::OnceCell;
-use warp::reply::Response;
-use warp::{Future, Reply};
+use warp::{Filter, Future, Reply};
 
+static CONFIG: OnceCell<AppConfig> = OnceCell::const_new();
 static DB_POOL: OnceCell<sqlx::Pool<sqlx::Postgres>> = OnceCell::const_new();
+static INIT_DB: OnceCell<()> = OnceCell::const_new();
 
-async fn get_db_pool() -> &'static sqlx::Pool<sqlx::Postgres> {
-    DB_POOL
-        .get_or_init(|| async { crate::db::get_pool_from_env().await })
+async fn init_config() -> &'static AppConfig {
+    CONFIG
+        .get_or_init(|| async {
+            dotenv::dotenv().expect("Could not load .env for testing.");
+            let env_hashmap = std::env::vars().into_iter().map(|(k, v)| (k, v)).collect();
+            AppConfig::init_from_hashmap(&env_hashmap).unwrap()
+        })
         .await
+}
+
+async fn get_db_pool(config: &AppConfig) -> &'static sqlx::Pool<sqlx::Postgres> {
+    DB_POOL
+        .get_or_init(|| async { get_pool_from_config(&config).await })
+        .await
+}
+
+async fn init_db(db_pool: sqlx::Pool<sqlx::Postgres>, config: &AppConfig) {
+    INIT_DB
+        .get_or_init(|| async {
+            crate::db::guarantee_db_components(
+                db_pool,
+                config.db_schema.clone(),
+                config.db_table.clone(),
+            )
+            .await;
+        })
+        .await;
 }
 
 #[tokio::test]
 async fn time_entries() {
-    dotenv::dotenv().expect("Could not load .env for testing.");
-    let db_pool = get_db_pool().await;
-    let db_schema = Arc::new(env::var("DB_SCHEMA").unwrap_or("public".to_owned()));
-    let db_table = Arc::new(env::var("DB_TABLE").unwrap_or("cloudevents_diary".to_owned()));
-
-    crate::db::guarantee_db_components(db_pool.clone(), db_schema.as_str(), db_table.as_str())
-        .await;
-    let filters = super::filters(db_pool.clone(), db_schema, db_table);
+    let filters = get_filters().await;
 
     let (_, duration) = time_async(async {
-        for _i in 0..10_000 {
-            post_event(filters.clone()).await;
+        let tasks: Vec<_> = (0..10_000)
+            .into_iter()
+            .map(|_| tokio::spawn(post_event(filters.clone())))
+            .collect();
+
+        for task in tasks {
+            task.await.unwrap();
         }
     })
     .await;
@@ -35,22 +58,24 @@ async fn time_entries() {
 
 #[tokio::test]
 async fn db_ready() {
-    dotenv::dotenv().expect("Could not load .env for testing.");
-
-    let db_pool = get_db_pool().await;
-    let db_schema = Arc::new(env::var("DB_SCHEMA").unwrap_or("public".to_owned()));
-    let db_table = Arc::new(env::var("DB_TABLE").unwrap_or("cloudevents_diary".to_owned()));
-
-    crate::db::guarantee_db_components(db_pool.clone(), db_schema.as_str(), db_table.as_str())
-        .await;
-    let filters = super::filters(db_pool.clone(), db_schema, db_table);
-
+    let filters = get_filters().await;
     let req = warp::test::request().method("GET").path("/health/live");
     let res = req.reply(&filters).await;
     let status = res.status();
     assert_eq!(status, warp::http::StatusCode::ACCEPTED);
     let time = String::from_utf8(res.body().to_vec()).expect("Bad ready response.");
     println!("Time: {time}");
+}
+
+async fn get_filters() -> impl Filter<Extract = (impl Reply,), Error = warp::Rejection> + Clone {
+    let config = init_config().await;
+    let db_pool = get_db_pool(&config).await;
+    init_db(db_pool.clone(), config).await;
+    super::filters(
+        db_pool.clone(),
+        config.db_schema.clone(),
+        config.db_table.clone(),
+    )
 }
 
 async fn time_async<F, O>(f: F) -> (O, Duration)

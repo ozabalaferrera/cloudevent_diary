@@ -23,9 +23,11 @@ path = "src/app.rs"
 [dependencies]
 cloudevents-sdk = { version = "0.7", features = ["warp"] }
 dotenv = "0.15.0"
+envconfig = "0.10.0"
 sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-native-tls", "postgres", "chrono", "json" ] }
 tokio = { version = "1.32", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1"
+tracing-panic = "0.1"
 tracing-subscriber = "0.3"
 warp = "0.3"
 
